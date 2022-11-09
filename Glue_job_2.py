@@ -8,15 +8,6 @@ from awsglueml.transforms import EntityDetector
 from pyspark.sql.types import StringType
 from awsglue.dynamicframe import DynamicFrame
 from pyspark.sql.functions import *
-from awsglue import DynamicFrame
-
-
-def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
-    for alias, frame in mapping.items():
-        frame.toDF().createOrReplaceTempView(alias)
-    result = spark.sql(query)
-    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
-
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 sc = SparkContext()
@@ -25,17 +16,17 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
 
-# Script generated for node Amazon S3
-AmazonS3_node1667857082712 = glueContext.create_dynamic_frame.from_catalog(
+# Script generated for node AWS Glue Data Catalog
+AWSGlueDataCatalog_node1668021418189 = glueContext.create_dynamic_frame.from_catalog(
     database="sample-pii-data",
-    table_name="vig_pii_test",
-    transformation_ctx="AmazonS3_node1667857082712",
+    table_name="pii_detector_test_vig",
+    transformation_ctx="AWSGlueDataCatalog_node1668021418189",
 )
 
 # Script generated for node Detect Sensitive Data
 entity_detector = EntityDetector()
 detected_df = entity_detector.detect(
-    AmazonS3_node1667857082712, ["CREDIT_CARD"], "DetectedEntities"
+    AWSGlueDataCatalog_node1668021418189, ["CREDIT_CARD"], "DetectedEntities"
 )
 
 
@@ -43,9 +34,7 @@ def replace_cell(original_cell_value, sorted_reverse_start_end_tuples):
     if sorted_reverse_start_end_tuples:
         for entity in sorted_reverse_start_end_tuples:
             to_mask_value = original_cell_value[entity[0] : entity[1]]
-            original_cell_value = original_cell_value.replace(
-                to_mask_value, "CONFIDENTIAL"
-            )
+            original_cell_value = original_cell_value.replace(to_mask_value, "REDACTED")
     return original_cell_value
 
 
@@ -77,31 +66,20 @@ def recur(df, remaining_keys):
         return recur(modified_df, tail)
 
 
-keys = AmazonS3_node1667857082712.toDF().columns
+keys = AWSGlueDataCatalog_node1668021418189.toDF().columns
 updated_masked_df = recur(detected_df.toDF(), keys)
 updated_masked_df = updated_masked_df.drop("DetectedEntities")
 
-DetectSensitiveData_node1667857110976 = DynamicFrame.fromDF(
+DetectSensitiveData_node1668021468911 = DynamicFrame.fromDF(
     updated_masked_df, glueContext, "updated_masked_df"
 )
 
-# Script generated for node SQL Query
-SqlQuery656 = """
-SELECT * FROM Customer_Info ORDER BY lname ASC;
-"""
-SQLQuery_node1667857359353 = sparkSqlQuery(
-    glueContext,
-    query=SqlQuery656,
-    mapping={"Customer_Info": DetectSensitiveData_node1667857110976},
-    transformation_ctx="SQLQuery_node1667857359353",
-)
-
 # Script generated for node PostgreSQL
-PostgreSQL_node1667857565353 = glueContext.write_dynamic_frame.from_catalog(
-    frame=SQLQuery_node1667857359353,
-    database="pii-data",
-    table_name="pii_data_public_pii",
-    transformation_ctx="PostgreSQL_node1667857565353",
+PostgreSQL_node1668021484215 = glueContext.write_dynamic_frame.from_catalog(
+    frame=DetectSensitiveData_node1668021468911,
+    database="piitestdatabase",
+    table_name="piitestdatabase_public_pii",
+    transformation_ctx="PostgreSQL_node1668021484215",
 )
 
 job.commit()
